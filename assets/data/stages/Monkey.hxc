@@ -1,0 +1,22 @@
+import flixel.FlxSprite;
+import flixel.math.FlxPoint;
+import flixel.FlxObject;
+
+class Monkey extends BaseStage
+{
+
+	public function new(){
+		super();
+
+		name = "monkey";
+		startingZoom = 0.9;
+		
+    var bg:FlxSprite = new FlxSprite(-600, -200).loadGraphic('assets/images/blender.png');
+		// bg.setGraphicSize(Std.int(bg.width * 2.5));
+		// bg.updateHitbox();
+		bg.antialiasing = true;
+		bg.scrollFactor.set(0.9, 0.9);
+		bg.active = false;
+		add(bg);
+	}
+}
