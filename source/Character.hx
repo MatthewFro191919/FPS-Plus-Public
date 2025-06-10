@@ -87,6 +87,26 @@ class Character extends FlxSpriteGroup
 	public var onAnimationFrame:FlxTypedSignal<(String, Int, Int) -> Void> = new FlxTypedSignal();
 	public var onAnimationFinish:FlxTypedSignal<(String) -> Void> = new FlxTypedSignal();
 
+	public var isModel:Bool = false;
+	public var beganLoading:Bool = false;
+	public var modelName:String;
+	public var modelScale:Float;
+	public var modelOrigBPM:Int;
+	public var model:ModelThing;
+
+	public var spinYaw:Bool = false;
+	public var spinYawVal:Int = 0;
+	public var spinPitch:Bool = false;
+	public var spinPitchVal:Int = 0;
+	public var spinRoll:Bool = false;
+	public var spinRollVal:Int = 0;
+	public var yTween:FlxTween;
+	public var xTween:FlxTween;
+	public var originalY:Float = -1;
+	public var originalX:Float = -1;
+	public var circleTween:FlxTween;
+	public var initYaw:Float = 0;
+
 	public function new(x:Float, y:Float, ?_character:String = "Bf", ?_isPlayer:Bool = false, ?_isGirlfriend:Bool = false, ?_enableDebug:Bool = false){
 
 		debugMode = _enableDebug;
@@ -104,6 +124,64 @@ class Character extends FlxSpriteGroup
 		charClass = _character;
 
 		createCharacterFromInfo(charClass);
+
+		var loadFrom = (isPlayer ? Main.modelViewBF.sprite : Main.modelView.sprite);
+
+		switch (curCharacter)
+		{
+			case 'monkey':
+				// DD: Okay, don't load models here cuz the engine will crash with more than one model
+
+				// model = new ModelThing("monkey", Main.modelView, 100, 80);
+				// model = new ModelThing("boyfriend", Main.modelView, 1.5, 80);
+				modelName = "monkey";
+				modelScale = 90;
+				modelOrigBPM = 75;
+				isModel = true;
+				loadGraphicFromSprite(loadFrom);
+				scale.x = scale.y = 1.4;
+				initYaw = 0;
+				updateHitbox();
+
+			case 'bf-poly':
+				// model = new ModelThing("boyfriend", Main.modelViewBF, 1.5, 80);
+				modelName = "boyfriend";
+				modelScale = 1.2;
+				modelOrigBPM = 75;
+				isModel = true;
+				loadGraphicFromSprite(loadFrom);
+				scale.x = scale.y = 1.6;
+				updateHitbox();
+				initYaw = 45;
+				flipX = true;
+		}
+		
+		dance();
+
+		if (isPlayer)
+		{
+			flipX = !flipX;
+
+			// Doesn't flip for BF, since his are already in the right place???
+			if (!isModel && !curCharacter.startsWith('bf'))
+			{
+				// var animArray
+				var oldRight = animation.getByName('singRIGHT').frames;
+				animation.getByName('singRIGHT').frames = animation.getByName('singLEFT').frames;
+				animation.getByName('singLEFT').frames = oldRight;
+
+				// IF THEY HAVE MISS ANIMATIONS??
+				if (animation.getByName('singRIGHTmiss') != null)
+				{
+					var oldMiss = animation.getByName('singRIGHTmiss').frames;
+					animation.getByName('singRIGHTmiss').frames = animation.getByName('singLEFTmiss').frames;
+					animation.getByName('singLEFTmiss').frames = oldMiss;
+				}
+			}
+		}
+
+		animation.finishCallback = animationEnd;
+
 
 		if (((facesLeft && !isPlayer) || (!facesLeft && isPlayer)) && !debugMode){
 			setFlipX(true);
@@ -127,6 +205,41 @@ class Character extends FlxSpriteGroup
 
 	override function update(elapsed:Float){
 		
+		if (!isPlayer && !isModel)
+		{
+			if (animation.curAnim.name.startsWith('sing'))
+			{
+				holdTimer += elapsed;
+			}
+
+			var dadVar:Float = 4;
+
+			if (curCharacter == 'dad')
+				dadVar = 6.1;
+			if (holdTimer >= Conductor.stepCrochet * dadVar * 0.001)
+			{
+				idleEnd();
+				holdTimer = 0;
+			}
+		}
+		else if (!isPlayer && isModel)
+		{
+			if (model.currentAnim.startsWith('sing'))
+			{
+				holdTimer += elapsed;
+			}
+
+			var dadVar:Float = 4;
+
+			if (curCharacter == 'dad')
+				dadVar = 6.1;
+			if (holdTimer >= Conductor.stepCrochet * dadVar * 0.001)
+			{
+				idleEnd();
+				holdTimer = 0;
+			}
+		}
+
 		if (!debugMode && !noLogic){
 			if (!isPlayer){
 				//opponent stuff
@@ -177,8 +290,24 @@ class Character extends FlxSpriteGroup
 
 		super.update(elapsed);
 
-	}
+		if (isModel)
+		{
+			if (spinYaw)
+			{
+				model.addYaw(elapsed * spinYawVal);
+			}
 
+			if (spinPitch)
+			{
+				model.addPitch(elapsed * spinPitchVal);
+			}
+
+			if (spinRoll)
+			{
+				model.addRoll(elapsed * spinRollVal);
+			}
+		}
+	}
 	public function dance(?ignoreDebug:Bool = false):Void{
 		if ((!debugMode || ignoreDebug) && !noLogic)
 		{
@@ -199,8 +328,18 @@ class Character extends FlxSpriteGroup
 				characterInfo.info.functions.dance(this);
 			}
 
+			switch (curCharacter)
+			{
+				default:
+					if (holdTimer == 0 && !isModel)
+						playAnim('idle', true);
+			}
 			onDance.dispatch();
 		}
+	}
+
+	public function idleEnd(?ignoreDebug:Bool = false)
+	{
 	}
 
 	public function defaultDanceBehavior():Void{
@@ -212,17 +351,19 @@ class Character extends FlxSpriteGroup
 	}
 
 	public function idleEnd(?ignoreDebug:Bool = false):Void{
-		if (!debugMode || ignoreDebug){
-			if(characterInfo.info.functions.idleEndOverride != null){
-				characterInfo.info.functions.idleEndOverride(this);
+		if (!isModel && (!debugMode || ignoreDebug))
+		{
+			switch (curCharacter)
+			{
+				case 'gf' | 'gf-car' | 'gf-christmas' | 'gf-pixel' | "spooky":
+					playAnim('danceRight', true, false, animation.getByName('danceRight').numFrames - 1);
+				default:
+					playAnim('idle', true, false, animation.getByName('idle').numFrames - 1);
 			}
-			else{
-				defaultIdleEndBehavior();
-			}
-
-			if(characterInfo.info.functions.idleEnd != null){
-				characterInfo.info.functions.idleEnd(this);
-			}
+		}
+		else if (isModel && (!debugMode || ignoreDebug))
+		{
+			playAnim('idle');
 		}
 	}
 
@@ -254,8 +395,41 @@ class Character extends FlxSpriteGroup
 	 * 
 	 * @return  						Returns `true` if the animation was played. Returns `false` if the animation wasn't found and could not be played.
 	 */
-	public function playAnim(AnimName:String, Force:Bool = false, Reversed:Bool = false, Frame:Int = 0):Bool{
-		return _playAnim(AnimName, Force, Reversed, Frame, false);
+	public function playAnim(AnimName:String, Force:Bool = false, Reversed:Bool = false, Frame:Int = 0):Void
+	{
+		if (isModel)
+		{
+			model.playAnim(AnimName);
+		}
+		else
+		{
+			animation.play(AnimName, Force, Reversed, Frame);
+
+			var daOffset = animOffsets.get(animation.curAnim.name);
+			if (animOffsets.exists(animation.curAnim.name))
+			{
+				offset.set(daOffset[0], daOffset[1]);
+			}
+			else
+				offset.set(0, 0);
+
+			if (curCharacter == 'gf')
+			{
+				if (AnimName == 'singLEFT')
+				{
+					danced = true;
+				}
+				else if (AnimName == 'singRIGHT')
+				{
+					danced = false;
+				}
+
+				if (AnimName == 'singUP' || AnimName == 'singDOWN')
+				{
+					danced = !danced;
+				}
+			}
+		}
 	}
 
 	//You can treat any animation as a singing animation instead of requiring "sing" to be in the animation name.
